@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 
-def sliding_band_analysis(freqs, magnitude, args):
+def sliding_band_analysis(freqs, magnitude):
     window_width =  freqs.max()/10
-    step = window_width / 1000
+    step = window_width / 100
 
     start_freqs = np.arange(0, freqs.max() - window_width, step)
     print(freqs.max()-window_width)
@@ -21,25 +21,14 @@ def sliding_band_analysis(freqs, magnitude, args):
 
     band_area = np.array(band_area)
 
-
-    plt.figure()
-    plt.plot(start_freqs, band_area)
-    plt.xlabel("Window Start Frequency (Hz)")
-    plt.ylabel("Area Under Spectrum")
-    plt.title("Sliding Frequency Band Area")
-    plt.grid(True)
-    plt.savefig(Path(args.output_dir, f"{args.name}/images/sliding_band_area.png"))
+    return start_freqs, band_area
 
 
-def timeline_stitching(timestamps, args):
 
-    
-    #plt.hist(timestamps, bins=250)
-    #plt.xlabel("Index")
-    #plt.ylabel("Time (s)")
-    #plt.title("regulartime series")
-    #plt.savefig(Path(args.output_dir, f"{args.name}/images/regular.png"))
-    #plt.close()
+
+def timeline_stitching(timestamps, name, output_dir):
+
+
     df = pd.DataFrame({"timestamp": timestamps})
 
     df["dt"] = timestamps.diff().dt.total_seconds()
@@ -54,7 +43,7 @@ def timeline_stitching(timestamps, args):
 
     df["is_gap"] = df["dt"] > GAP_THRESHOLD
  
-    # Amount of time to remove at each step
+    # amount of time to remove at each step
     df["gap_duration"] = df["dt"].where(df["is_gap"], 0)
 
     adjusted = pd.Series(timestamps).copy()
@@ -66,27 +55,32 @@ def timeline_stitching(timestamps, args):
 
         adjusted.iloc[i] = adjusted.iloc[i] - pd.Timedelta(seconds=removed_time)
 
-
-    #plt.hist(adjusted, bins=250)
-    #plt.xlabel("Index")
-    #plt.ylabel("Adjusted Time (s)")
-    #plt.title("Gap-removed time series")
-    #plt.savefig(Path(args.output_dir, f"{args.name}/images/gap_removed_time_series.png"))
-    
-
     return adjusted
 
 
-def fourier_analysis(args):   
+def _full_analysis(input, timeline_stitch):
 
-    df = pd.read_csv(args.input)
-    timestamps = pd.to_datetime(df["timestamp"]).astype("datetime64[ns, UTC]")
+    df = pd.read_csv(input)
+    timestamps = pd.to_datetime(df["timestamp"], format='ISO8601').astype("datetime64[ns, UTC]")
+
+    magnitude, freqs = fourier_analysis(timestamps, timeline_stitch)
+    mean_magnitude = np.mean(magnitude)
+    std_magnitude = np.std(magnitude)
+
+    start_freqs,band_area = sliding_band_analysis(freqs, magnitude)
+    mean_band_area = np.mean(band_area)
+    std_band_area = np.std(band_area)
+    
+    return  magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area, mean_band_area, std_band_area
+
+
+def fourier_analysis(timestamps, timeline_stitch=False):   
 
     timestamps = timestamps.sort_values().reset_index(drop=True)
 
-    timestamps = timeline_stitching(timestamps, args)    
-
-
+    if timeline_stitch:
+        timestamps = timeline_stitching(timestamps)
+    
     t0 = timestamps.iloc[0]
     time_seconds = (timestamps - t0).dt.total_seconds()
 
@@ -97,7 +91,8 @@ def fourier_analysis(args):
         gaps = gaps[gaps > 0]
 
         
-    dt = (np.mean(gaps)) /2     # time bin size in seconds 
+    dt = (np.mean(gaps)) /2    
+     # time bin size in seconds 
 
     fs = 1 / dt 
 
@@ -119,24 +114,6 @@ def fourier_analysis(args):
     freqs = freqs[mask][1:]
     magnitude = np.abs(fft_vals[mask])[1:]
 
+    return magnitude, freqs
 
-    mean_magnitude = np.mean(magnitude)
-    std_magnitude = np.std(magnitude)
-
-    print(f"Mean of magnitude: {mean_magnitude}")
-    print(f"Standard deviation of magnitude: {std_magnitude}")
-    # Plot the mean and standard deviation lines on time domain plot
-    plt.figure()
-    plt.axhline(mean_magnitude+std_magnitude*5, color='r', linestyle='--', label='Mean')
-
-    plt.plot(freqs, magnitude)
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Magnitude")
-    plt.title("Frequency Domain (FFT)")
-    plt.grid(True)
-    plt.savefig(Path(args.output_dir, f"{args.name}/images/frequency_domain.png"))
-
-
-    sliding_band_analysis(freqs, magnitude, args)
-
-
+   
