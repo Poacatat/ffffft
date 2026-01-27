@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 import sys
+import numpy as np
 from .analysis import _full_analysis
 from .output_utils import print_output
 
@@ -69,6 +70,13 @@ def main(argv):
     args = parser.parse_args(argv[1:])
 
     magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area,  mean_band_area, std_band_area =_full_analysis(args.input,args.timeline_stitching)
+    #print(1/start_freqs[np.argmax(band_area)])
+    #dt = 1/(start_freqs[np.argmax(band_area)])/2
+    #magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area,  mean_band_area, std_band_area =_full_analysis(args.input,args.timeline_stitching, dt=dt)
+    
+    print(1/start_freqs[np.argmax(band_area)])
+
+
     print("Analysis complete, generating output...")
     print_output(
         name = args.name, output_dir = args.output_dir,
@@ -79,9 +87,6 @@ def main(argv):
         mean_magnitude = mean_magnitude, std_magnitude = std_magnitude,
         mean_band_area = mean_band_area, std_band_area = std_band_area
     )
-
-   
-
 
 
 

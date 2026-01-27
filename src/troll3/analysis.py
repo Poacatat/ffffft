@@ -14,11 +14,16 @@ def sliding_band_analysis(freqs: np.ndarray, magnitude: np.ndarray) -> tuple[np.
     :rtype: tuple[ndarray, ndarray]
     '''
 
+    if len(freqs) != len(magnitude):
+        raise ValueError("Frequency and magnitude arrays must be of the same length.")
+
+    if len(freqs) < 10:
+        return freqs, magnitude
+
     window_width =  freqs.max()/10
     step = window_width / 100
 
     start_freqs = np.arange(0, freqs.max() - window_width, step)
-    print(freqs.max()-window_width)
     band_area = []
 
     for f_start in start_freqs:
@@ -32,10 +37,13 @@ def sliding_band_analysis(freqs: np.ndarray, magnitude: np.ndarray) -> tuple[np.
 
     return start_freqs, band_area
 
+def bootstraping(timestamps: Union[pd.Series, np.ndarray], frequency: float, iterations: int=1):
+     return fourier_analysis(timestamps, timeline_stitch=False, dt=1/(4*frequency))
+
 
 
 def sliding_window_analysis(freqs, magnitude, window_width, step):
-    pass
+   pass
 
 def timeline_stitching(timestamps, name, output_dir):
     
@@ -69,12 +77,12 @@ def timeline_stitching(timestamps, name, output_dir):
     return adjusted
 
 
-def _full_analysis(input: str, timeline_stitch: bool=False) -> tuple[np.ndarray, np.ndarray, float, float, np.ndarray, np.ndarray, float, float]:
+def _full_analysis(input: str, timeline_stitch: bool=False, dt=None) -> tuple[np.ndarray, np.ndarray, float, float, np.ndarray, np.ndarray, float, float]:
 
     df = pd.read_csv(input)
 
     try:
-        magnitude, freqs = fourier_analysis(df["timestamp"], timeline_stitch)
+        magnitude, freqs = fourier_analysis(df["timestamp"], timeline_stitch, dt=dt)
     except ValueError as e:
         print("Fourier analysis failed", file=sys.stderr)
         raise SystemExit    
@@ -87,7 +95,7 @@ def _full_analysis(input: str, timeline_stitch: bool=False) -> tuple[np.ndarray,
     return  magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area, mean_band_area, std_band_area
 
 
-def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: bool=False) -> tuple[np.ndarray, np.ndarray]:   
+def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: bool=False, dt=None) -> tuple[np.ndarray, np.ndarray]:   
     
     if isinstance(timestamps, np.ndarray):
         timestamps = pd.Series(timestamps)
@@ -118,10 +126,9 @@ def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: 
         print("Non-positive gap detected!")
         gaps = gaps[gaps > 0]
 
-        
-    dt = (np.mean(gaps)) /2    
-     # time bin size in seconds 
-
+    if dt is None:
+        dt = (np.mean(gaps)) /2    
+      # time bin size in seconds 
     fs = 1 / dt 
 
     t_max = time_seconds.max()
@@ -136,11 +143,13 @@ def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: 
     n = len(signal)
     fft_vals = np.fft.fft(signal)
     freqs = np.fft.fftfreq(n, d=dt)
+  
 
-    #positive frequencies only
+    #positive frequencies only, and take away the zero frequency
     mask = freqs >= 0
     freqs = freqs[mask][1:]
     magnitude = np.abs(fft_vals[mask])[1:]
+
 
 
 
