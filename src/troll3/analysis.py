@@ -2,9 +2,19 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import sys
 
 
-def sliding_band_analysis(freqs, magnitude):
+def sliding_band_analysis(freqs: np.ndarray, magnitude: np.ndarray) -> tuple[np.ndarray, np.ndarray]: 
+
+    '''
+    Computes the area under the magnitude curve for sliding frequency bands.
+    :param freqs: The frequency array
+    :param magnitude: The magnitudes
+    :return: Description
+    :rtype: tuple[ndarray, ndarray]
+    '''
+
     window_width =  freqs.max()/10
     step = window_width / 100
 
@@ -25,9 +35,11 @@ def sliding_band_analysis(freqs, magnitude):
 
 
 
+def sliding_window_analysis(freqs, magnitude, window_width, step):
+    pass
 
 def timeline_stitching(timestamps, name, output_dir):
-
+    
 
     df = pd.DataFrame({"timestamp": timestamps})
 
@@ -58,24 +70,38 @@ def timeline_stitching(timestamps, name, output_dir):
     return adjusted
 
 
-def _full_analysis(input, timeline_stitch):
+def _full_analysis(input: str, timeline_stitch: bool=False) -> tuple[np.ndarray, np.ndarray, float, float, np.ndarray, np.ndarray, float, float]:
 
     df = pd.read_csv(input)
-    timestamps = pd.to_datetime(df["timestamp"], format='ISO8601').astype("datetime64[ns, UTC]")
 
-    magnitude, freqs = fourier_analysis(timestamps, timeline_stitch)
+    try:
+        magnitude, freqs = fourier_analysis(df["timestamp"], timeline_stitch)
+    except ValueError as e:
+        print("Fourier analysis failed", file=sys.stderr)
+        raise SystemExit    
     mean_magnitude = np.mean(magnitude)
     std_magnitude = np.std(magnitude)
 
     start_freqs,band_area = sliding_band_analysis(freqs, magnitude)
     mean_band_area = np.mean(band_area)
     std_band_area = np.std(band_area)
-    
     return  magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area, mean_band_area, std_band_area
 
 
-def fourier_analysis(timestamps, timeline_stitch=False):   
+def fourier_analysis(timestamps: pd.Series, timeline_stitch=False) -> tuple[np.ndarray, np.ndarray]:   
 
+    if timestamps.dtype != 'datetime64[ns, UTC]':
+        try:
+            timestamps = pd.to_datetime(timestamps, format='ISO8601').astype("datetime64[ns, UTC]")
+        except ValueError as e:
+            print("Error converting timestamps:", str(e), file=sys.stderr)
+            print("Timestamps must be in datetime64[ns, UTC] format", file=sys.stderr)
+            print("Aborting analysis.", file=sys.stderr)
+            raise e
+    if len(timestamps) < 3:
+        print("Aborting analysis.", file=sys.stderr)
+        raise ValueError("Not enough timestamps for analysis.", file=sys.stderr)
+    
     timestamps = timestamps.sort_values().reset_index(drop=True)
 
     if timeline_stitch:
@@ -113,6 +139,8 @@ def fourier_analysis(timestamps, timeline_stitch=False):
     mask = freqs >= 0
     freqs = freqs[mask][1:]
     magnitude = np.abs(fft_vals[mask])[1:]
+
+
 
     return magnitude, freqs
 
