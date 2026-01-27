@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
 import sys
+from typing import Union
 
 
 def sliding_band_analysis(freqs: np.ndarray, magnitude: np.ndarray) -> tuple[np.ndarray, np.ndarray]: 
@@ -88,8 +87,11 @@ def _full_analysis(input: str, timeline_stitch: bool=False) -> tuple[np.ndarray,
     return  magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area, mean_band_area, std_band_area
 
 
-def fourier_analysis(timestamps: pd.Series, timeline_stitch=False) -> tuple[np.ndarray, np.ndarray]:   
-
+def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: bool=False) -> tuple[np.ndarray, np.ndarray]:   
+    
+    if isinstance(timestamps, np.ndarray):
+        timestamps = pd.Series(timestamps)
+    
     if timestamps.dtype != 'datetime64[ns, UTC]':
         try:
             timestamps = pd.to_datetime(timestamps, format='ISO8601').astype("datetime64[ns, UTC]")
