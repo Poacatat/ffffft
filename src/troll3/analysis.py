@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import sys
 from typing import Union
-
+from scipy.stats import weibull_min
 
 def sliding_band_analysis(freqs: np.ndarray, magnitude: np.ndarray) -> tuple[np.ndarray, np.ndarray]: 
 
@@ -41,9 +41,10 @@ def bootstraping(timestamps: Union[pd.Series, np.ndarray], frequency: float, ite
      return fourier_analysis(timestamps, timeline_stitch=False, dt=1/(4*frequency))
 
 
-
 def sliding_window_analysis(freqs, magnitude, window_width, step):
    pass
+
+
 
 def timeline_stitching(timestamps, name, output_dir):
     
@@ -92,26 +93,62 @@ def _full_analysis(input: str, timeline_stitch: bool=False, dt=None) -> tuple[np
     start_freqs,band_area = sliding_band_analysis(freqs, magnitude)
     mean_band_area = np.mean(band_area)
     std_band_area = np.std(band_area)
-    return  magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area, mean_band_area, std_band_area
+
+    weibull_p = weibull_analysis(magnitude)
+
+    return  magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area, mean_band_area, std_band_area, weibull_p
+
+def weibull_analysis(data: Union[pd.Series, np.ndarray]) -> float:
+    ''' 
+    Perform Weibull analysis on the given data.\n
+    Determines the probability of observing the maximum value in the dataset based on the fitted Weibull distribution.
+    '''
+    
+    if isinstance(data, np.ndarray):
+        if data.dtype != float:
+            data = data.astype(float)
+        data = pd.Series(data)
+    if data.dtype != float:
+        try:
+            data = data.astype(float)
+        except ValueError as e:
+            print("Error converting data to float:", str(e), file=sys.stderr)
+            print("Data must be convertible to float for Weibull analysis", file=sys.stderr)
+            print("Aborting analysis.", file=sys.stderr)
+            raise SystemExit
+        
+
+    shape, loc, scale = weibull_min.fit(data)
+
+    n = len(data)
+    x_max = np.max(data)
+
+    F_xmax = weibull_min.cdf(x_max, shape, loc=loc, scale=scale)
+    # ^ the probabilty of a single value being greater than x_max
+
+    p_max = 1 - (F_xmax ** n)
+    # ^ the probability of at least one value in n samples being greater than x_maxs
+    return p_max
 
 
-def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: bool=False, dt=None) -> tuple[np.ndarray, np.ndarray]:   
+def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: bool=False, dt=None, de_trend: bool=True) -> tuple[np.ndarray, np.ndarray]:   
+    
     
     if isinstance(timestamps, np.ndarray):
         timestamps = pd.Series(timestamps)
     
-    if timestamps.dtype != 'datetime64[ns, UTC]':
-        try:
-            timestamps = pd.to_datetime(timestamps, format='ISO8601').astype("datetime64[ns, UTC]")
-        except ValueError as e:
-            print("Error converting timestamps:", str(e), file=sys.stderr)
-            print("Timestamps must be in datetime64[ns, UTC] format", file=sys.stderr)
-            print("Aborting analysis.", file=sys.stderr)
-            raise e
+    #if timestamps.dtype != 'datetime64[ns, UTC]':
+    try:
+        timestamps = pd.to_datetime(timestamps, utc=True)#.astype("datetime64[ns, UTC]")
+    except ValueError as e:
+        print("Error converting timestamps:", str(e), file=sys.stderr)
+        print("Timestamps must be in datetime64[ns, UTC] format", file=sys.stderr)
+        print("Aborting analysis.", file=sys.stderr)
+        raise e
     if len(timestamps) < 3:
         print("Aborting analysis.", file=sys.stderr)
         raise ValueError("Not enough timestamps for analysis.", file=sys.stderr)
-    
+    assert timestamps.dtype == "datetime64[ns, UTC]"
     timestamps = timestamps.sort_values().reset_index(drop=True)
 
     if timeline_stitch:
@@ -125,6 +162,8 @@ def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: 
     if not np.all(gaps > 0): 
         print("Non-positive gap detected!")
         gaps = gaps[gaps > 0]
+
+
 
     if dt is None:
         dt = (np.mean(gaps)) /2    
@@ -150,6 +189,12 @@ def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: 
     freqs = freqs[mask][1:]
     magnitude = np.abs(fft_vals[mask])[1:]
 
+    if de_trend:
+        total_length = t_max - time_seconds.min()
+        threshold_freq = 3.5/total_length
+        detrend_mask = freqs >= threshold_freq
+        magnitude = magnitude[detrend_mask]
+        freqs = freqs[detrend_mask]
 
 
 

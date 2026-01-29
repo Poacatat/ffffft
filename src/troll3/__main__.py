@@ -69,11 +69,15 @@ def main(argv):
 
     args = parser.parse_args(argv[1:])
 
-    magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area,  mean_band_area, std_band_area =_full_analysis(args.input,args.timeline_stitching)
-    #print(1/start_freqs[np.argmax(band_area)])
-    #dt = 1/(start_freqs[np.argmax(band_area)])/2
-    #magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area,  mean_band_area, std_band_area =_full_analysis(args.input,args.timeline_stitching, dt=dt)
+    magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area,  mean_band_area, std_band_area, weibull_p =_full_analysis(args.input,args.timeline_stitching)
     
+   
+    print(1/start_freqs[np.argmax(band_area)])
+    dt = 360*10#1/(start_freqs[np.argmax(band_area)])/2
+    magnitude, freqs, mean_magnitude, std_magnitude, start_freqs, band_area,  mean_band_area, std_band_area, weibull_p =_full_analysis(args.input,args.timeline_stitching, dt=dt)
+    np.savetxt(f"{args.output_dir}/dart/{args.name}_magnitudes_new.csv", magnitude, delimiter=",")
+    np.savetxt(f"{args.output_dir}/dart/{args.name}_frequencies.csv", freqs, delimiter=",")
+   
     print(1/start_freqs[np.argmax(band_area)])
 
 
