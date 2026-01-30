@@ -103,11 +103,23 @@ def weibull_analysis(data: Union[pd.Series, np.ndarray]) -> float:
     Perform Weibull analysis on the given data.\n
     Determines the probability of observing the maximum value in the dataset based on the fitted Weibull distribution.
     '''
+
     
     if isinstance(data, np.ndarray):
         if data.dtype != float:
             data = data.astype(float)
         data = pd.Series(data)
+    
+    if data.dropna().empty:
+        return np.nan
+    
+    if len(data) < 3:
+        #print("Not enough data for Weibull analysis", file=sys.stderr)
+        return np.nan
+    
+    if data.nunique() == 1:
+        return np.nan
+
     if data.dtype != float:
         try:
             data = data.astype(float)
@@ -117,17 +129,27 @@ def weibull_analysis(data: Union[pd.Series, np.ndarray]) -> float:
             print("Aborting analysis.", file=sys.stderr)
             raise SystemExit
         
+    try:
 
-    shape, loc, scale = weibull_min.fit(data)
+        shape, loc, scale = weibull_min.fit(data)
+    except Exception as e:
+        print("Weibull fitting failed:", str(e), file=sys.stderr)
+        print("Aborting analysis.", file=sys.stderr)
+        print(data)
+        print(data.nunique())
+        print(len(data))
+        return np.nan
+    
 
     n = len(data)
     x_max = np.max(data)
-
+        
     F_xmax = weibull_min.cdf(x_max, shape, loc=loc, scale=scale)
     # ^ the probabilty of a single value being greater than x_max
 
-    p_max = 1 - (F_xmax ** n)
+    p_max = 1 - (F_xmax ** n)   
     # ^ the probability of at least one value in n samples being greater than x_maxs
+
     return p_max
 
 
@@ -148,37 +170,56 @@ def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: 
     if len(timestamps) < 3:
         print("Aborting analysis.", file=sys.stderr)
         raise ValueError("Not enough timestamps for analysis.", file=sys.stderr)
-    assert timestamps.dtype == "datetime64[ns, UTC]"
+    if timestamps.dtype != "datetime64[ns, UTC]":
+        timestamps = timestamps.astype("datetime64[ns, UTC]")
     timestamps = timestamps.sort_values().reset_index(drop=True)
 
     if timeline_stitch:
         timestamps = timeline_stitching(timestamps)
+
+    if not timestamps.is_monotonic_increasing:
+        timestamps  = timestamps.sort_values().reset_index(drop=True)
     
+
+
+
     t0 = timestamps.iloc[0]
     time_seconds = (timestamps - t0).dt.total_seconds()
 
     gaps = time_seconds.diff().dropna().values  
 
     if not np.all(gaps > 0): 
-        print("Non-positive gap detected!")
+        #print("Non-positive gap detected!")
         gaps = gaps[gaps > 0]
 
-
+    if len(gaps) == 0:
+        #print("All timestamps are identical!", file=sys.stderr)
+        return np.array([np.nan]) , np.array([np.nan])
 
     if dt is None:
         dt = (np.mean(gaps)) /2    
+
+    #if dt == np.nan:
+    #    return np.array([np.nan]) , np.array([np.nan])
+
       # time bin size in seconds 
     fs = 1 / dt 
 
     t_max = time_seconds.max()
-    bins = np.arange(0, t_max + dt, dt)
+    try:
+        bins = np.arange(0, t_max + dt, dt)
+    except ValueError as e:
+        print(t_max)
+        print(dt)
+        print(timestamps)
+        print(dt==0.0)
 
     # Count events per bin
     signal, _ = np.histogram(time_seconds, bins=bins)
 
     signal = signal - np.mean(signal)
 
-
+    
     n = len(signal)
     fft_vals = np.fft.fft(signal)
     freqs = np.fft.fftfreq(n, d=dt)
@@ -195,6 +236,17 @@ def fourier_analysis(timestamps: Union[pd.Series, np.ndarray], timeline_stitch: 
         detrend_mask = freqs >= threshold_freq
         magnitude = magnitude[detrend_mask]
         freqs = freqs[detrend_mask]
+    #else:
+    #    total_length = t_max - time_seconds.min()
+    #    threshold_freq = 3.5/total_length
+        #print(f"{total_length/3600}")
+        #print(f"{threshold_freq}")
+    #print("Length:" , len(freqs))
+
+
+
+
+
 
 
 
